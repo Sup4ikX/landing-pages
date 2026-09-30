@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${seo_title}</title>
+<meta name="description" content="${seo_description}">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-submit-base="${submit_base}">
+<header class="site-header"><div class="wrap">
+<a class="brand" href="#hero">${name}</a>
+<a class="btn btn-primary" href="#contact">Оставить заявку</a>
+</div></header>
+<main class="wrap">
+${blocks}
+</main>
+<footer class="site-footer"><div class="wrap">
+<p>${name} · ${address} · ${hours}</p>
+<p><a href="tel:${phone_raw}">${phone}</a></p>
+</div></footer>
+<script src="script.js"></script>
+</body>
+</html>

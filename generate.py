@@ -1,8 +1,10 @@
 """Static landing page generator: validate configs -> render templates -> build dist/."""
+import html as html_mod
 import json
 import re
 import sys
 from pathlib import Path
+from string import Template
 
 ROOT = Path(__file__).resolve().parent
 KNOWN_BLOCKS = {"hero", "services", "prices", "reviews", "gallery", "map", "contact"}
@@ -93,3 +95,78 @@ def load_site(path):
         raise ConfigError(f"{path}: невалидный JSON — {e}") from e
     validate(cfg, str(path).replace("\\", "/"), path.parent.parent)
     return cfg
+
+
+ITEM_TEMPLATE_FOR_BLOCK = {"services": "service", "prices": "price",
+                           "reviews": "review", "gallery": "photo"}
+BLOCKS_DIR = ROOT / "template" / "blocks"
+ITEMS_DIR = ROOT / "template" / "items"
+
+
+def esc(value):
+    """HTML-escape a config value for safe insertion into markup/attributes."""
+    return html_mod.escape(str(value), quote=True)
+
+
+def context(site):
+    """Flat, escaped substitution context for one site config."""
+    phone_digits = digits(site["phone"])
+    if site["submit"]["type"] == "bot":
+        submit_base = f"https://t.me/{site['submit']['bot_username']}?start=landing_{site['id']}"
+        submit_label = "Написать в Telegram"
+    else:
+        submit_base = f"https://wa.me/{phone_digits}"
+        submit_label = "Отправить в WhatsApp"
+    return {
+        "name": esc(site["name"]),
+        "tagline": esc(site["tagline"]),
+        "phone": esc(site["phone"]),
+        "phone_raw": phone_digits,
+        "address": esc(site["address"]),
+        "hours": esc(site["hours"]),
+        "map_lat": str(site["map"]["lat"]),
+        "map_lon": str(site["map"]["lon"]),
+        "seo_title": esc(site["seo"]["title"]),
+        "seo_description": esc(site["seo"]["description"]),
+        "theme": esc(site["theme"]),
+        "submit_base": esc(submit_base),
+        "submit_label": esc(submit_label),
+    }
+
+
+def render_items(item_template, items):
+    """Render each item dict into the item partial and join the results."""
+    out = []
+    for item in items:
+        escaped = {k: esc(v) for k, v in item.items()}
+        out.append(Template(item_template).substitute(escaped))
+    return "\n".join(out)
+
+
+def render_block(name, site, ctx):
+    """Render one section: wrapper partial plus its repeated items, if any."""
+    wrapper = (BLOCKS_DIR / f"{name}.html").read_text(encoding="utf-8")
+    if name in ITEM_TEMPLATE_FOR_BLOCK:
+        item_tpl = (ITEMS_DIR / f"{ITEM_TEMPLATE_FOR_BLOCK[name]}.html").read_text(encoding="utf-8")
+        items = site[name]
+        if name == "reviews":
+            items = [{**r, "stars": "★" * r["rating"] + "☆" * (5 - r["rating"])} for r in items]
+        if name == "gallery":
+            items = [{"src": f"assets/{Path(g).name}",
+                      "alt": f"{site['name']} — фото {i + 1}"} for i, g in enumerate(items)]
+        ctx = {**ctx, "items": render_items(item_tpl, items)}
+    try:
+        return Template(wrapper).substitute(ctx)
+    except KeyError as e:
+        raise ConfigError(f"шаблон blocks/{name}.html требует поле {e}, отсутствующее в конфиге") from e
+
+
+def assemble(site):
+    """Full index.html source for one site: layout + blocks in config order."""
+    ctx = context(site)
+    layout = (ROOT / "template" / "layout.html").read_text(encoding="utf-8")
+    blocks_html = "\n".join(render_block(b, site, ctx) for b in site["blocks"])
+    try:
+        return Template(layout).substitute({**ctx, "blocks": blocks_html})
+    except KeyError as e:
+        raise ConfigError(f"шаблон layout.html требует поле {e}, отсутствующее в конфиге") from e
