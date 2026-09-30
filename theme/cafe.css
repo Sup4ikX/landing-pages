@@ -1,0 +1,10 @@
+/* Cafe skin: cream + terracotta, airy serif headings. */
+:root {
+  --bg: #faf5ec;
+  --surface: #ffffff;
+  --text: #3b2f26;
+  --accent: #b96a35;
+  --border: #e6d9c6;
+  --btn-text: #ffffff;
+  --heading-font: Georgia, "Times New Roman", serif;
+}

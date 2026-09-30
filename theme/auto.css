@@ -1,0 +1,10 @@
+/* Auto service skin: graphite + signal orange, dense headings. */
+:root {
+  --bg: #16181d;
+  --surface: #1f232b;
+  --text: #eef1f5;
+  --accent: #ff7a1a;
+  --border: #333a45;
+  --btn-text: #14161a;
+  --heading-font: "Arial Black", Impact, sans-serif;
+}
