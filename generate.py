@@ -2,6 +2,7 @@
 import html as html_mod
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 from string import Template
@@ -170,3 +171,38 @@ def assemble(site):
         return Template(layout).substitute({**ctx, "blocks": blocks_html})
     except KeyError as e:
         raise ConfigError(f"шаблон layout.html требует поле {e}, отсутствующее в конфиге") from e
+
+
+def build_site(site):
+    """Write one self-contained site into dist/<id>/ (replaces any previous build)."""
+    out = ROOT / "dist" / site["id"]
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    (out / "index.html").write_text(assemble(site), encoding="utf-8")
+    base_css = (ROOT / "theme" / "base.css").read_text(encoding="utf-8")
+    skin_css = (ROOT / "theme" / f"{site['theme']}.css").read_text(encoding="utf-8")
+    (out / "style.css").write_text(base_css + "\n" + skin_css, encoding="utf-8")
+    shutil.copy(ROOT / "template" / "script.js", out / "script.js")
+    assets_out = out / "assets"
+    assets_out.mkdir()
+    for path in site["gallery"]:
+        shutil.copy(ROOT / path, assets_out / Path(path).name)
+
+
+def main():
+    """Validate every config first, then build all sites. Returns exit code."""
+    try:
+        configs = sorted((ROOT / "sites").glob("*.json"))
+        if not configs:
+            raise ConfigError("sites/: нет ни одного конфига")
+        sites = [load_site(p) for p in configs]  # validate ALL before writing anything
+        for site in sites:
+            build_site(site)
+    except ConfigError as e:
+        print(e, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
