@@ -41,9 +41,14 @@ def _check_list(path, value, minimum, keys, field):
 
 def validate(cfg, path, root):
     """Raise ConfigError if the config cannot produce a correct page."""
+    if not isinstance(cfg, dict):
+        raise ConfigError(f"{path}: конфиг должен быть JSON-объектом")
     for field in ALWAYS_REQUIRED:
-        if field not in cfg:
+        value = cfg.get(field)
+        if value is None or (isinstance(value, (str, list, dict)) and not value):
             raise ConfigError(f"{path}: отсутствует поле {field}")
+    if not isinstance(cfg["seo"], dict):
+        raise ConfigError(f"{path}: отсутствует поле seo")
     if cfg["id"] != Path(path).stem:
         raise ConfigError(f'{path}: id "{cfg["id"]}" не совпадает с именем файла')
     if cfg["theme"] not in THEMES:
@@ -51,17 +56,19 @@ def validate(cfg, path, root):
     if not isinstance(cfg["blocks"], list) or not cfg["blocks"]:
         raise ConfigError(f"{path}: поле blocks должно быть непустым списком")
     for block in cfg["blocks"]:
-        if block not in KNOWN_BLOCKS:
+        if not isinstance(block, str) or block not in KNOWN_BLOCKS:
             raise ConfigError(f"{path}: неизвестный блок {block}")
     for field in ("title", "description"):
         if not cfg["seo"].get(field):
             raise ConfigError(f"{path}: отсутствует поле seo.{field}")
     if not all(cfg[f] for f in ("name", "tagline", "address", "hours")):
         raise ConfigError(f"{path}: поля name, tagline, address, hours должны быть непустыми")
-    if len(digits(cfg["phone"])) != 11:
+    phone = cfg["phone"]
+    phone_digits = digits(phone) if isinstance(phone, str) else ""
+    if len(phone_digits) != 11 or not phone_digits.startswith("7"):
         raise ConfigError(f"{path}: поле phone должно содержать 11 цифр с кодом страны")
-    if cfg["submit"].get("type") not in ("messenger", "bot"):
-        raise ConfigError(f'{path}: submit.type должен быть messenger или bot')
+    if not isinstance(cfg["submit"], dict) or cfg["submit"].get("type") not in ("messenger", "bot"):
+        raise ConfigError(f"{path}: отсутствует поле submit")
     if cfg["submit"]["type"] == "bot" and not cfg["submit"].get("bot_username"):
         raise ConfigError(f"{path}: отсутствует поле submit.bot_username")
     blocks = set(cfg["blocks"])
@@ -79,12 +86,15 @@ def validate(cfg, path, root):
         if not isinstance(gallery, list) or len(gallery) < 4:
             raise ConfigError(f"{path}: поле gallery должно содержать минимум 4 файла")
         for g in gallery:
-            if not (root / g).is_file():
+            if not isinstance(g, str) or not (root / g).is_file():
                 raise ConfigError(f"{path}: файл галереи не найден: {g}")
     if "map" in blocks:
         m = cfg.get("map")
         if not isinstance(m, dict) or "lat" not in m or "lon" not in m:
             raise ConfigError(f"{path}: отсутствует поле map.lat/map.lon")
+        for axis in ("lat", "lon"):
+            if isinstance(m[axis], bool) or not isinstance(m[axis], (int, float)):
+                raise ConfigError(f"{path}: поле map.{axis} должно быть числом")
 
 
 def load_site(path):
@@ -118,6 +128,9 @@ def context(site):
     else:
         submit_base = f"https://wa.me/{phone_digits}"
         submit_label = "Отправить в WhatsApp"
+    blocks = set(site["blocks"])
+    contact = "contact" in blocks
+    site_map = site.get("map") or {}
     return {
         "name": esc(site["name"]),
         "tagline": esc(site["tagline"]),
@@ -125,8 +138,11 @@ def context(site):
         "phone_raw": phone_digits,
         "address": esc(site["address"]),
         "hours": esc(site["hours"]),
-        "map_lat": str(site["map"]["lat"]),
-        "map_lon": str(site["map"]["lon"]),
+        "map_lat": esc(site_map.get("lat", "")),
+        "map_lon": esc(site_map.get("lon", "")),
+        "hero_href": "#hero" if "hero" in blocks else "#",
+        "cta_href": "#contact" if contact else f"tel:{phone_digits}",
+        "cta_label": "Оставить заявку" if contact else "Позвонить",
         "seo_title": esc(site["seo"]["title"]),
         "seo_description": esc(site["seo"]["description"]),
         "theme": esc(site["theme"]),
@@ -183,10 +199,12 @@ def build_site(site):
     skin_css = (ROOT / "theme" / f"{site['theme']}.css").read_text(encoding="utf-8")
     (out / "style.css").write_text(base_css + "\n" + skin_css, encoding="utf-8")
     shutil.copy(ROOT / "template" / "script.js", out / "script.js")
-    assets_out = out / "assets"
-    assets_out.mkdir()
-    for path in site["gallery"]:
-        shutil.copy(ROOT / path, assets_out / Path(path).name)
+    gallery_paths = site.get("gallery") or []
+    if gallery_paths:
+        assets_out = out / "assets"
+        assets_out.mkdir()
+        for path in gallery_paths:
+            shutil.copy(ROOT / path, assets_out / Path(path).name)
 
 
 def main():

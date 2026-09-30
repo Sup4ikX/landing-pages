@@ -25,6 +25,26 @@ class TestContext(unittest.TestCase):
         self.assertEqual(ctx["submit_base"], "https://t.me/demo_bot?start=landing_demo")
         self.assertEqual(ctx["submit_label"], "Написать в Telegram")
 
+    def test_context_escapes_coords(self):
+        ctx = generate.context(make_cfg(map={"lat": '55.7" onload="x', "lon": 37.7}))
+        self.assertEqual(ctx["map_lat"], "55.7&quot; onload=&quot;x")
+
+    def test_context_without_map_key(self):
+        cfg = make_cfg(blocks=["hero"])
+        del cfg["map"]
+        self.assertEqual(generate.context(cfg)["map_lat"], "")
+
+    def test_cta_links_with_contact(self):
+        html = generate.assemble(make_cfg())
+        self.assertIn('href="#contact"', html)
+        self.assertIn("Оставить заявку", html)
+
+    def test_cta_links_tell_phone_when_contact_absent(self):
+        html = generate.assemble(make_cfg(blocks=["hero", "services"]))
+        self.assertIn('href="tel:79001112233"', html)
+        self.assertIn("Позвонить", html)
+        self.assertNotIn("#contact", html)
+
 
 class TestRender(unittest.TestCase):
     def ctx(self, **over):

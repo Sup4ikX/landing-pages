@@ -107,6 +107,28 @@ class TestValidate(unittest.TestCase):
     def test_phone_wrong_digit_count(self):
         self.check(make_cfg(phone="+7 900 111-22"), "11 цифр")
 
+    def test_phone_eleven_digits_without_country_code(self):
+        self.check(make_cfg(phone="9 001 112 23 33"), "phone", "11 цифр")
+
+    def test_phone_wrong_type(self):
+        self.check(make_cfg(phone=79001112233), "phone")
+
+    def test_seo_wrong_type(self):
+        self.check(make_cfg(seo="строка"), "отсутствует поле", "seo")
+
+    def test_submit_wrong_type(self):
+        self.check(make_cfg(submit=[]), "отсутствует поле", "submit")
+
+    def test_blocks_with_non_string_entries(self):
+        self.check(make_cfg(blocks=["hero", 5]), "неизвестный блок")
+
+    def test_gallery_non_string_entry(self):
+        self.check(make_cfg(gallery=[1, 2, 3, 4]), "не найден")
+
+    def test_map_coords_must_be_numbers(self):
+        cfg = make_cfg(map={"lat": '55.7" onload="alert(1)', "lon": 37.7074})
+        self.check(cfg, "map.lat", "числом")
+
     def test_load_site_reads_and_validates(self):
         sites = self.root / "sites"
         sites.mkdir(exist_ok=True)

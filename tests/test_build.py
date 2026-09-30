@@ -92,5 +92,38 @@ class TestNegative(unittest.TestCase):
                          "validation runs before any output is written")
 
 
+class TestSubset(unittest.TestCase):
+    """Spec allows block subsets: absent optional blocks/keys must not crash."""
+
+    def setUp(self):
+        self.tmp = Path(ROOT.parent / f".tmp_subset_{self._testMethodName}")
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        shutil.copytree(ROOT, self.tmp,
+                        ignore=shutil.ignore_patterns("dist", ".git", "__pycache__",
+                                                      "docs", ".playwright-cli", ".tmp*"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def write_auto(self, cfg):
+        p = self.tmp / "sites" / "auto.json"
+        p.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+
+    def test_minimal_config_without_optional_keys(self):
+        cfg = json.loads((ROOT / "sites" / "auto.json").read_text(encoding="utf-8"))
+        cfg["blocks"] = ["hero", "services"]
+        del cfg["map"]
+        del cfg["gallery"]
+        self.write_auto(cfg)
+        (self.tmp / "sites" / "cafe.json").unlink()
+        proc = run_cli(cwd=self.tmp)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        html = (self.tmp / "dist" / "auto" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn('id="map"', html)
+        self.assertNotIn('id="contact"', html)
+        self.assertIn('href="tel:79001112233"', html)
+        self.assertFalse((self.tmp / "dist" / "auto" / "assets").exists())
+        script = (self.tmp / "dist" / "auto" / "script.js").read_text(encoding="utf-8")
+        self.assertIn("if (form)", script)
+
+
 if __name__ == "__main__":
     unittest.main()
